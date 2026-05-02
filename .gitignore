@@ -1,10 +1,16 @@
 .DS_Store
+# Generated parser/lexer files (build artifacts, not source)
 y.tab.c
-y.output
 y.tab.h
+y.output
+parser.tab.c
+parser.tab.h
+parser.output
 lex.yy.c
+# Compiled binaries and build outputs
 a.out
-__pycache__/
-*.pyc
 compiler
 compiler.exe
+# Python cache
+__pycache__/
+*.pyc

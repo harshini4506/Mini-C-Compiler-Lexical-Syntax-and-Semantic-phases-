@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-COMPILER_SOURCE_FILES = [BASE_DIR / "y.tab.c", BASE_DIR / "lex.yy.c"]
+COMPILER_GRAMMAR_FILES = [BASE_DIR / "parser.y", BASE_DIR / "lexer.l"]  # Source grammar files
 COMPILER_BINARY_NAME = "compiler.exe" if os.name == "nt" else "compiler"
 COMPILER_BINARY_PATH = BASE_DIR / COMPILER_BINARY_NAME
 
@@ -49,55 +49,89 @@ SAMPLES = {
 
 
 def ensure_compiler_binary() -> Path:
-    # DEBUG: List available files in working directory
-    available_files = os.listdir(BASE_DIR)
-    print(f"[DEBUG] Working directory: {BASE_DIR}")
-    print(f"[DEBUG] Files present: {[f for f in available_files if f.endswith(('.c', '.h', '.l', '.y'))][:20]}")
+    """
+    Self-healing compiler builder: regenerates lexer/parser if needed,
+    then compiles to binary. Treats .c files as build artifacts, not source.
+    """
+    print(f"📂 Working directory: {BASE_DIR}")
+    print(f"📂 Available files: {[f for f in os.listdir(BASE_DIR) if f.endswith(('.c', '.h', '.l', '.y'))][:20]}")
     
-    source_mtime = max(source.stat().st_mtime for source in COMPILER_SOURCE_FILES)
-    if COMPILER_BINARY_PATH.exists() and COMPILER_BINARY_PATH.stat().st_mtime >= source_mtime:
-        print(f"[DEBUG] Using cached compiler binary: {COMPILER_BINARY_PATH}")
-        return COMPILER_BINARY_PATH
-
-    missing_sources = [source.name for source in COMPILER_SOURCE_FILES if not source.exists()]
-    if missing_sources:
-        raise FileNotFoundError(
-            "Missing compiler sources: " + ", ".join(missing_sources) + ". "
-            "Render needs y.tab.c and lex.yy.c in the project root."
+    # Step 1: Generate lexer from lexer.l if lex.yy.c doesn't exist
+    lexer_output = BASE_DIR / "lex.yy.c"
+    if not lexer_output.exists():
+        print("⚙️ Generating lex.yy.c using flex from lexer.l...")
+        result = subprocess.run(
+            ["flex", "-o", "lex.yy.c", "lexer.l"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
         )
-
-    # Build compiler from y.tab.c and lex.yy.c
+        if result.returncode != 0:
+            raise RuntimeError(f"flex failed: {result.stderr}")
+        print("✓ lex.yy.c generated successfully")
+    else:
+        print("✓ lex.yy.c already exists")
+    
+    # Step 2: Generate parser from parser.y if y.tab.c doesn't exist
+    parser_output = BASE_DIR / "y.tab.c"
+    if not parser_output.exists():
+        print("⚙️ Generating y.tab.c using bison from parser.y...")
+        result = subprocess.run(
+            ["bison", "-d", "-o", "y.tab.c", "parser.y"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"bison failed: {result.stderr}")
+        print("✓ y.tab.c generated successfully")
+    else:
+        print("✓ y.tab.c already exists")
+    
+    # Step 3: Detect parser file (handle both y.tab.c and parser.tab.c)
+    if (BASE_DIR / "y.tab.c").exists():
+        parser_file = "y.tab.c"
+    elif (BASE_DIR / "parser.tab.c").exists():
+        parser_file = "parser.tab.c"
+    else:
+        raise FileNotFoundError("Neither y.tab.c nor parser.tab.c found after bison generation")
+    
+    # Step 4: Check if binary is up-to-date or needs rebuilding
+    if COMPILER_BINARY_PATH.exists():
+        parser_mtime = (BASE_DIR / parser_file).stat().st_mtime
+        lexer_mtime = lexer_output.stat().st_mtime
+        binary_mtime = COMPILER_BINARY_PATH.stat().st_mtime
+        
+        if binary_mtime >= max(parser_mtime, lexer_mtime):
+            print(f"✓ Using cached compiler binary: {COMPILER_BINARY_PATH}")
+            return COMPILER_BINARY_PATH
+    
+    # Step 5: Compile parser + lexer → binary
     build_command = [
         "gcc",
         "-std=c99",
         "-w",
-        "y.tab.c",
+        parser_file,
         "lex.yy.c",
         "-lm",
         "-o",
         COMPILER_BINARY_NAME,
     ]
     
-    print(f"[DEBUG] Building compiler with: {' '.join(build_command)}")
-    print(f"[DEBUG] Build working dir: {BASE_DIR}")
-
-    build_result = subprocess.run(
+    print(f"⚙️ Compiling with: {' '.join(build_command)}")
+    
+    result = subprocess.run(
         build_command,
         cwd=BASE_DIR,
         capture_output=True,
         text=True,
     )
     
-    print(f"[DEBUG] Build stdout: {build_result.stdout}")
-    print(f"[DEBUG] Build stderr: {build_result.stderr}")
-    print(f"[DEBUG] Build returncode: {build_result.returncode}")
-
-    if build_result.returncode != 0:
-        error_text = build_result.stderr.strip() or build_result.stdout.strip() or "Failed to build compiler binary"
-        raise RuntimeError(error_text)
+    if result.returncode != 0:
+        error_msg = result.stderr.strip() or result.stdout.strip() or "Compilation failed"
+        raise RuntimeError(f"gcc compilation failed:\n{error_msg}")
     
-    print(f"[DEBUG] Compiler successfully built at: {COMPILER_BINARY_PATH}")
-
+    print(f"✓ Compiler binary successfully built at: {COMPILER_BINARY_PATH}")
     return COMPILER_BINARY_PATH
 
 
