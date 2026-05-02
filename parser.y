@@ -21,6 +21,7 @@
         char * data_type;
         char * type;
         int line_no;
+		int scope;
 	} symbol_table[40];
 
     int count=0;
@@ -33,9 +34,12 @@
 	int temp_var=0;
 	int label=0;
 	int is_for=0;
+	int current_scope=0;
+	char current_function[100];
 	char buff[100];
+	char token_text[100];
 	char errors[10][100];
-	char reserved[10][10] = {"int", "float", "char", "void", "if", "else", "for", "main", "return", "include"};
+	char reserved[10][10] = {"int", "float", "char", "void", "if", "else", "for", "while", "main", "return"};
 	char icg[50][100];
 
 	struct node { 
@@ -64,24 +68,45 @@
 			char else_body[5];
 		} nd_obj3;
 	} 
-%token VOID 
-%token <nd_obj> CHARACTER PRINTFF SCANFF INT FLOAT CHAR FOR IF ELSE TRUE FALSE NUMBER FLOAT_NUM ID LE GE EQ NE GT LT AND OR STR ADD MULTIPLY DIVIDE SUBTRACT UNARY INCLUDE RETURN 
-%type <nd_obj> headers main body return datatype statement arithmetic relop program else for_statement if_statement
-%type <nd_obj2> init value expression
+%token VOID
+%token <nd_obj> CHARACTER PRINTFF SCANFF INT FLOAT CHAR FOR IF ELSE WHILE TRUE FALSE NUMBER FLOAT_NUM ID LE GE EQ NE GT LT AND OR STR ADD MULTIPLY DIVIDE SUBTRACT MOD UNARY INCLUDE RETURN 
+%type <nd_obj> headers main body return datatype statement arithmetic relop program else for_statement if_statement while_statement function_list function_def parameters parameter_list parameter declaration_tail
+%type <nd_obj2> init value expression argument_list printf_tail scanf_tail
 %type <nd_obj3> condition
 
 %%
 
-program: headers main '(' ')' '{' body return '}' { $2.nd = mknode($6.nd, $7.nd, "main"); $$.nd = mknode($1.nd, $2.nd, "program"); 
+program: headers function_list { $$.nd = mknode($1.nd, $2.nd, "program"); 
 	head = $$.nd;
-} 
+}
+;
+
+function_list: function_list function_def { $$.nd = mknode($1.nd, $2.nd, "functions"); }
+| function_def { $$.nd = $1.nd; }
+;
+
+function_def: datatype ID { strcpy(token_text, $2.name); add('F'); strcpy(current_function, $2.name); current_scope++; } '(' parameters ')' '{' body return '}' {
+	struct node *func = mknode($8.nd, $9.nd, $2.name);
+	$$.nd = mknode($5.nd, func, "function");
+}
+;
+
+parameters: parameter_list { $$.nd = $1.nd; }
+| /* empty */ { $$.nd = NULL; }
+;
+
+parameter_list: parameter_list ',' parameter { $$.nd = mknode($1.nd, $3.nd, "parameters"); }
+| parameter { $$.nd = $1.nd; }
+;
+
+parameter: datatype ID { strcpy(token_text, $2.name); add('V'); $2.nd = mknode(NULL, NULL, $2.name); $$.nd = $2.nd; }
 ;
 
 headers: headers headers { $$.nd = mknode($1.nd, $2.nd, "headers"); }
-| INCLUDE { add('H'); } { $$.nd = mknode(NULL, NULL, $1.name); }
+| INCLUDE { strcpy(token_text, $1.name); add('H'); } { $$.nd = mknode(NULL, NULL, $1.name); }
 ;
 
-main: datatype ID { add('F'); } { $$.nd = mknode(NULL, NULL, $2.name); }
+main: datatype ID { strcpy(token_text, $2.name); add('F'); } { $$.nd = mknode(NULL, NULL, $2.name); }
 ;
 
 datatype: INT { insert_type(); }
@@ -93,9 +118,10 @@ datatype: INT { insert_type(); }
 body: /* empty */ { $$.nd = NULL; }
 | body for_statement { $$.nd = mknode($1.nd, $2.nd, "statements"); }
 | body if_statement { $$.nd = mknode($1.nd, $2.nd, "statements"); }
+| body while_statement { $$.nd = mknode($1.nd, $2.nd, "statements"); }
 | body statement ';' { $$.nd = mknode($1.nd, $2.nd, "statements"); }
-| body PRINTFF { add('K'); } '(' STR ')' ';' { $$.nd = mknode($1.nd, NULL, "printf"); }
-| body SCANFF { add('K'); } '(' STR ',' '&' ID ')' ';' { $$.nd = mknode($1.nd, NULL, "scanf"); }
+| body PRINTFF { add('K'); } '(' STR printf_tail ')' ';' { $$.nd = mknode($1.nd, NULL, "printf"); }
+| body SCANFF { add('K'); } '(' STR scanf_tail ')' ';' { $$.nd = mknode($1.nd, NULL, "scanf"); }
 ;
 
 for_statement: FOR { add('K'); is_for = 1; } '(' statement ';' condition ';' statement ')' '{' body '}' { 
@@ -112,6 +138,14 @@ if_statement: IF { add('K'); is_for = 0; } '(' condition ')' { sprintf(icg[ic_id
 	struct node *iff = mknode($4.nd, $8.nd, $1.name); 
 	$$.nd = mknode(iff, $11.nd, "if-else"); 
 	sprintf(icg[ic_idx++], "GOTO next\n");
+}
+;
+
+while_statement: WHILE { add('K'); is_for = 1; } '(' condition ')' '{' body '}' {
+	struct node *while_node = mknode($4.nd, $7.nd, "CONDITION");
+	$$.nd = mknode(while_node, $7.nd, $1.name);
+	sprintf(icg[ic_idx++], "\nJUMP to %s\n", $4.if_body);
+	sprintf(icg[ic_idx++], "\nLABEL %s:\n", $4.else_body);
 }
 ;
 
@@ -137,7 +171,7 @@ condition: value relop value {
 | { $$.nd = NULL; }
 ;
 
-statement: datatype ID { add('V'); } init { 
+statement: datatype ID { strcpy(token_text, $2.name); add('V'); } init { 
 	$2.nd = mknode(NULL, NULL, $2.name); 
 	int t = check_types($1.name, $4.type); 
 	if(t>0) { 
@@ -170,6 +204,10 @@ statement: datatype ID { add('V'); } init {
 		$$.nd = mknode($2.nd, $4.nd, "declaration"); 
 	} 
 	sprintf(icg[ic_idx++], "%s = %s\n", $2.name, $4.name);
+}
+| datatype ID { strcpy(token_text, $2.name); add('V'); } declaration_tail {
+	$2.nd = mknode(NULL, NULL, $2.name);
+	$$.nd = mknode($2.nd, $4.nd, "declaration");
 }
 | ID { check_declaration($1.name); } '=' expression {
 	$1.nd = mknode(NULL, NULL, $1.name); 
@@ -244,6 +282,24 @@ init: '=' value { $$.nd = $2.nd; sprintf($$.type, $2.type); strcpy($$.name, $2.n
 | { sprintf($$.type, "null"); $$.nd = mknode(NULL, NULL, "NULL"); strcpy($$.name, "NULL"); }
 ;
 
+declaration_tail: ',' ID { strcpy(token_text, $2.name); add('V'); $2.nd = mknode(NULL, NULL, $2.name); $$.nd = $2.nd; }
+| ',' ID declaration_tail { strcpy(token_text, $2.name); add('V'); $2.nd = mknode(NULL, NULL, $2.name); $$.nd = mknode($2.nd, $3.nd, "declarations"); }
+| { $$.nd = NULL; }
+;
+
+argument_list: argument_list ',' expression { $$.nd = mknode($1.nd, $3.nd, "arguments"); }
+| expression { $$.nd = $1.nd; }
+| /* empty */ { $$.nd = NULL; }
+;
+
+printf_tail: ',' expression printf_tail { $$.nd = mknode($2.nd, $3.nd, "printf_args"); }
+| /* empty */ { $$.nd = NULL; }
+;
+
+scanf_tail: ',' '&' ID scanf_tail { $$.nd = mknode(NULL, $4.nd, $3.name); }
+| /* empty */ { $$.nd = NULL; }
+;
+
 expression: expression arithmetic expression { 
 	if(!strcmp($1.type, $3.type)) {
 		sprintf($$.type, $1.type);
@@ -286,12 +342,21 @@ expression: expression arithmetic expression {
 	sprintf(icg[ic_idx++], "%s = %s %s %s\n",  $$.name, $1.name, $2.name, $3.name);
 }
 | value { strcpy($$.name, $1.name); sprintf($$.type, $1.type); $$.nd = $1.nd; }
+| '(' expression ')' { strcpy($$.name, $2.name); sprintf($$.type, $2.type); $$.nd = $2.nd; }
+| ID '(' argument_list ')' {
+	strcpy($$.name, $1.name);
+	char *id_type = get_type($1.name);
+	if(id_type) sprintf($$.type, id_type);
+	else sprintf($$.type, "unknown");
+	$$.nd = mknode(NULL, NULL, $1.name);
+}
 ;
 
 arithmetic: ADD 
 | SUBTRACT 
 | MULTIPLY
 | DIVIDE
+| MOD
 ;
 
 relop: LT
@@ -308,7 +373,7 @@ value: NUMBER { strcpy($$.name, $1.name); sprintf($$.type, "int"); add('C'); $$.
 | ID { strcpy($$.name, $1.name); char *id_type = get_type($1.name); if(id_type) sprintf($$.type, id_type); else sprintf($$.type, "unknown"); check_declaration($1.name); $$.nd = mknode(NULL, NULL, $1.name); }
 ;
 
-return: RETURN { add('K'); } value ';' { check_return_type($3.name); $1.nd = mknode(NULL, NULL, "return"); $$.nd = mknode($1.nd, $3.nd, "RETURN"); }
+return: RETURN { add('K'); } expression ';' { check_return_type($3.name); $1.nd = mknode(NULL, NULL, "return"); $$.nd = mknode($1.nd, $3.nd, "RETURN"); }
 | { $$.nd = NULL; }
 ;
 
@@ -353,7 +418,7 @@ int main() {
 int search(char *type) {
 	int i;
 	for(i=count-1; i>=0; i--) {
-		if(strcmp(symbol_table[i].id_name, type)==0) {
+		if(strcmp(symbol_table[i].id_name, type)==0 && symbol_table[i].scope == current_scope) {
 			return -1;
 			break;
 		}
@@ -370,7 +435,7 @@ void check_declaration(char *c) {
 }
 
 void check_return_type(char *value) {
-	char *main_datatype = get_type("main");
+	char *main_datatype = get_type(current_function);
 	char *return_datatype = get_type(value);
 	if(return_datatype == NULL) return_datatype = "CONST";
 	if(main_datatype && ((!strcmp(main_datatype, "int") && !strcmp(return_datatype, "CONST")) || !strcmp(main_datatype, return_datatype))){
@@ -405,9 +470,13 @@ int check_types(char *type1, char *type2){
 }
 
 char *get_type(char *var){
-	for(int i=0; i<count; i++) {
-		// Handle case of use before declaration
-		if(!strcmp(symbol_table[i].id_name, var)) {
+	for(int i=count-1; i>=0; i--) {
+		if(!strcmp(symbol_table[i].id_name, var) && symbol_table[i].scope == current_scope) {
+			return symbol_table[i].data_type;
+		}
+	}
+	for(int i=count-1; i>=0; i--) {
+		if(!strcmp(symbol_table[i].id_name, var) && symbol_table[i].scope == 0) {
 			return symbol_table[i].data_type;
 		}
 	}
@@ -415,57 +484,64 @@ char *get_type(char *var){
 }
 
 void add(char c) {
+	char *lexeme = token_text[0] ? token_text : yytext;
 	if(c == 'V'){
 		for(int i=0; i<10; i++){
-			if(!strcmp(reserved[i], strdup(yytext))){
-        		sprintf(errors[sem_errors], "Line %d: Variable name \"%s\" is a reserved keyword!\n", countn+1, yytext);
+			if(!strcmp(reserved[i], strdup(lexeme))){
+	        		sprintf(errors[sem_errors], "Line %d: Variable name \"%s\" is a reserved keyword!\n", countn+1, lexeme);
 				sem_errors++;
 				return;
 			}
 		}
 	}
-    q=search(yytext);
+	q=search(lexeme);
 	if(!q) {
 		if(c == 'H') {
-			symbol_table[count].id_name=strdup(yytext);
+			symbol_table[count].id_name=strdup(lexeme);
 			symbol_table[count].data_type=strdup(type);
 			symbol_table[count].line_no=countn;
+			symbol_table[count].scope=0;
 			symbol_table[count].type=strdup("Header");
 			count++;
 		}
 		else if(c == 'K') {
-			symbol_table[count].id_name=strdup(yytext);
+			symbol_table[count].id_name=strdup(lexeme);
 			symbol_table[count].data_type=strdup("N/A");
 			symbol_table[count].line_no=countn;
+			symbol_table[count].scope=current_scope;
 			symbol_table[count].type=strdup("Keyword\t");
 			count++;
 		}
 		else if(c == 'V') {
-			symbol_table[count].id_name=strdup(yytext);
+			symbol_table[count].id_name=strdup(lexeme);
 			symbol_table[count].data_type=strdup(type);
 			symbol_table[count].line_no=countn;
+			symbol_table[count].scope=current_scope;
 			symbol_table[count].type=strdup("Variable");
 			count++;
 		}
 		else if(c == 'C') {
-			symbol_table[count].id_name=strdup(yytext);
+			symbol_table[count].id_name=strdup(lexeme);
 			symbol_table[count].data_type=strdup("CONST");
 			symbol_table[count].line_no=countn;
+			symbol_table[count].scope=current_scope;
 			symbol_table[count].type=strdup("Constant");
 			count++;
 		}
 		else if(c == 'F') {
-			symbol_table[count].id_name=strdup(yytext);
+			symbol_table[count].id_name=strdup(lexeme);
 			symbol_table[count].data_type=strdup(type);
 			symbol_table[count].line_no=countn;
+			symbol_table[count].scope=0;
 			symbol_table[count].type=strdup("Function");
 			count++;
 		}
     }
     else if(c == 'V' && q) {
-        sprintf(errors[sem_errors], "Line %d: many declarations of \"%s\"  are not allowed!\n", countn+1, yytext);
+		sprintf(errors[sem_errors], "Line %d: many declarations of \"%s\"  are not allowed!\n", countn+1, lexeme);
 		sem_errors++;
     }
+	token_text[0] = '\0';
 }
 
 struct node* mknode(struct node *left, struct node *right, char *token) {	

@@ -20,6 +20,7 @@ unary "++"|"--"
 
 "if"	                    { strcpy(yylval.nd_obj.name,(yytext)); return IF; }
 "else"	                    { strcpy(yylval.nd_obj.name,(yytext)); return ELSE; }
+"while"                    { strcpy(yylval.nd_obj.name,(yytext)); return WHILE; }
 ^"#include"[ ]*<.+\.h>      { strcpy(yylval.nd_obj.name,(yytext)); return INCLUDE; }
 "true"                      { strcpy(yylval.nd_obj.name,(yytext)); return TRUE; }
 "false"                     { strcpy(yylval.nd_obj.name,(yytext)); return FALSE; }
@@ -39,6 +40,7 @@ unary "++"|"--"
 "-"                         { strcpy(yylval.nd_obj.name,(yytext)); return SUBTRACT; }
 "/"                         { strcpy(yylval.nd_obj.name,(yytext)); return DIVIDE; }
 "*"                         { strcpy(yylval.nd_obj.name,(yytext)); return MULTIPLY; }
+"%"                         { strcpy(yylval.nd_obj.name,(yytext)); return MOD; }
 \/\/.*                      { ; }
 \/\*(.*\n)*.*\*\/           { ; } 
 [ \t]*                      { ; }
