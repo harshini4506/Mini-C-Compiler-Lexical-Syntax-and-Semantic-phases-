@@ -4,3 +4,7 @@ y.output
 y.tab.h
 lex.yy.c
 a.out
+__pycache__/
+*.pyc
+compiler
+compiler.exe

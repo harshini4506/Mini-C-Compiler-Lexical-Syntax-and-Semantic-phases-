@@ -1,72 +1,22 @@
-import streamlit as st
-import subprocess
+from flask import Flask, render_template, request, jsonify
 import os
+import subprocess
 from pathlib import Path
 
-# Page configuration
-st.set_page_config(
-    page_title="Mini C Compiler IDE",
-    page_icon="🔧",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+BASE_DIR = Path(__file__).resolve().parent
+COMPILER_SOURCE_FILES = [BASE_DIR / "y.tab.c", BASE_DIR / "lex.yy.c"]
+COMPILER_BINARY_NAME = "compiler.exe" if os.name == "nt" else "compiler"
+COMPILER_BINARY_PATH = BASE_DIR / COMPILER_BINARY_NAME
 
-# Custom styling
-st.markdown("""
-    <style>
-    .main {
-        padding-top: 2rem;
-    }
-    .stButton > button {
-        width: 100%;
-        border-radius: 8px;
-        font-size: 16px;
-        padding: 12px 24px;
-        font-weight: bold;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    h1 {
-        color: #2563eb;
-        text-align: center;
-    }
-    h2 {
-        color: #1e40af;
-        border-bottom: 2px solid #2563eb;
-        padding-bottom: 10px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
-# Header
-st.title("🔧 Mini C Compiler - Professional IDE")
-st.markdown("**Lexical Analysis | Syntax Analysis | Semantic Analysis**")
-st.divider()
-
-# Sidebar
-with st.sidebar:
-    st.header("ℹ️ About")
-    st.markdown("""
-    This is a professional Mini C Compiler IDE supporting:
-    - ✓ Variable declarations (int, float, char)
-    - ✓ Arithmetic operations
-    - ✓ Control flow (if-else, for loops)
-    - ✓ I/O operations (printf, scanf)
-    - ✓ Symbol table management
-    - ✓ Parse tree generation
-    - ✓ Semantic analysis
-    """)
-    
-    st.divider()
-    st.header("📝 Sample Code")
-    
-    samples = {
-        "Hello World": """int main() {
+SAMPLES = {
+    "Hello World": """int main() {
     printf("Hello World");
     return 0;
 }""",
-        "Variables": """int main() {
+    "Variables": """int main() {
     int x;
     float y;
     x = 10;
@@ -74,163 +24,179 @@ with st.sidebar:
     printf("%d", x);
     return 0;
 }""",
-        "Arithmetic": """int main() {
+    "Arithmetic": """int main() {
     int a = 10;
     int b = 20;
     int sum = a + b;
     printf("%d", sum);
     return 0;
 }""",
-        "If-Else": """int main() {
+    "If-Else": """int main() {
     int x = 5;
     if (x > 0) {
         printf("positive");
     }
     return 0;
 }""",
-        "For Loop": """int main() {
+    "For Loop": """int main() {
     int i;
     for (i = 0; i < 5; i = i + 1) {
         printf("%d", i);
     }
     return 0;
-}"""
-    }
-    
-    selected_sample = st.selectbox("Load Sample:", list(samples.keys()))
-    sample_code = samples[selected_sample]
+}""",
+}
 
-# Main content area
-col1, col2 = st.columns([1, 1], gap="large")
 
-with col1:
-    st.subheader("💻 Code Editor")
-    
-    # Initialize session state
-    if 'code' not in st.session_state:
-        st.session_state.code = sample_code
-    if 'load_sample' not in st.session_state:
-        st.session_state.load_sample = False
-    
-    # Load sample if selected
-    if st.session_state.load_sample:
-        st.session_state.code = sample_code
-        st.session_state.load_sample = False
-    
-    # Code editor
-    code_input = st.text_area(
-        "Enter your C code:",
-        value=st.session_state.code,
-        height=300,
-        key="code_editor",
-        help="Write your C code here. Supports basic C syntax.",
-        label_visibility="collapsed"
+def ensure_compiler_binary() -> Path:
+    source_mtime = max(source.stat().st_mtime for source in COMPILER_SOURCE_FILES)
+    if COMPILER_BINARY_PATH.exists() and COMPILER_BINARY_PATH.stat().st_mtime >= source_mtime:
+        return COMPILER_BINARY_PATH
+
+    missing_sources = [source.name for source in COMPILER_SOURCE_FILES if not source.exists()]
+    if missing_sources:
+        raise FileNotFoundError(
+            "Missing compiler sources: " + ", ".join(missing_sources) + ". "
+            "Render needs y.tab.c and lex.yy.c in the project root."
+        )
+
+    build_command = [
+        "gcc",
+        "-std=c99",
+        "-w",
+        str(COMPILER_SOURCE_FILES[0]),
+        str(COMPILER_SOURCE_FILES[1]),
+        "-lm",
+        "-o",
+        str(COMPILER_BINARY_PATH),
+    ]
+
+    build_result = subprocess.run(
+        build_command,
+        cwd=BASE_DIR,
+        capture_output=True,
+        text=True,
     )
-    
-    col_load, col_clear = st.columns(2)
-    with col_load:
-        if st.button("📁 Load Sample", use_container_width=True):
-            st.session_state.code = sample_code
-            st.rerun()
-    
-    with col_clear:
-        if st.button("🗑️ Clear", use_container_width=True):
-            st.session_state.code = ""
-            st.rerun()
 
-with col2:
-    st.subheader("📊 Compilation Output")
-    
-    if st.button("▶ Compile Code", use_container_width=True, type="primary"):
-        if not code_input.strip():
-            st.error("⚠️ Please enter C code to compile")
+    if build_result.returncode != 0:
+        error_text = build_result.stderr.strip() or build_result.stdout.strip() or "Failed to build compiler binary"
+        raise RuntimeError(error_text)
+
+    return COMPILER_BINARY_PATH
+
+
+def run_compiler(code: str) -> dict:
+    compiler_path = ensure_compiler_binary()
+
+    result = subprocess.run(
+        [str(compiler_path)],
+        input=code,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+
+    stdout = result.stdout.strip()
+    stderr = result.stderr.strip()
+
+    tokens_output = []
+    syntax_output = []
+    semantic_output = []
+    current_section = "tokens"
+
+    for line in stdout.splitlines():
+        if "******stage 1******" in line:
+            current_section = "tokens"
+            continue
+        if "******stage 3******" in line:
+            current_section = "syntax"
+            continue
+        if "ERROR:" in line or "semantic" in line.lower():
+            semantic_output.append(line)
+            continue
+        if current_section == "tokens":
+            tokens_output.append(line)
+        elif current_section == "syntax":
+            syntax_output.append(line)
         else:
-            st.info("⏳ Compiling...")
-            
-            try:
-                # Find compiler executable
-                compiler_path = os.path.join(os.path.dirname(__file__), 'compiler.exe')
-                
-                if not os.path.exists(compiler_path):
-                    st.error(f"❌ Compiler not found at: {compiler_path}")
-                else:
-                    # Run compiler
-                    result = subprocess.run(
-                        [compiler_path],
-                        input=code_input,
-                        text=True,
-                        capture_output=True,
-                        timeout=10
-                    )
-                    
-                    stdout = result.stdout.strip()
-                    stderr = result.stderr.strip()
-                    
-                    # Parse output
-                    tokens_output = []
-                    syntax_output = []
-                    semantic_output = []
-                    current_section = 'tokens'
-                    
-                    for line in stdout.splitlines():
-                        if '******stage 1******' in line:
-                            current_section = 'tokens'
-                            continue
-                        if '******stage 3******' in line:
-                            current_section = 'syntax'
-                            continue
-                        if 'ERROR:' in line or 'semantic' in line.lower():
-                            semantic_output.append(line)
-                            continue
-                        if current_section == 'tokens':
-                            tokens_output.append(line)
-                        elif current_section == 'syntax':
-                            syntax_output.append(line)
-                        else:
-                            tokens_output.append(line)
-                    
-                    if stderr:
-                        syntax_output.append(stderr)
-                    
-                    # Display results in tabs
-                    tab1, tab2, tab3 = st.tabs(["🔤 Tokens", "⚠️ Syntax Errors", "🔍 Semantic Analysis"])
-                    
-                    with tab1:
-                        if tokens_output:
-                            st.success("✓ Tokens generated successfully")
-                            st.code('\n'.join(tokens_output), language='text')
-                        else:
-                            st.info("No tokens output")
-                    
-                    with tab2:
-                        if syntax_output:
-                            if any('error' in line.lower() for line in syntax_output):
-                                st.error("✗ Syntax errors found")
-                                st.code('\n'.join(syntax_output), language='text')
-                            else:
-                                st.success("✓ No syntax errors detected")
-                        else:
-                            st.success("✓ No syntax errors detected")
-                    
-                    with tab3:
-                        if semantic_output:
-                            st.error("✗ Semantic errors found")
-                            st.code('\n'.join(semantic_output), language='text')
-                        else:
-                            st.success("✓ No semantic errors detected")
-                    
-                    st.success("✓ Compilation finished successfully!")
-                    
-            except subprocess.TimeoutExpired:
-                st.error("❌ Compilation timeout (exceeded 10 seconds)")
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+            tokens_output.append(line)
 
-# Footer
-st.divider()
-st.markdown("""
-<div style='text-align: center; color: #6b7280; font-size: 12px;'>
-    <p>🚀 Mini C Compiler IDE | Professional Lexical • Syntax • Semantic Analyzer</p>
-    <p>Built with Streamlit | Deployed on Azure</p>
-</div>
-""", unsafe_allow_html=True)
+    if stderr:
+        syntax_output.append(stderr)
+
+    if not tokens_output:
+        tokens_output = [stdout or "No compiler output available."]
+
+    if not syntax_output:
+        syntax_output = ["✓ No syntax errors detected."]
+
+    if not semantic_output:
+        semantic_output = ["✓ No semantic errors detected."]
+
+    return {
+        "tokens": "\n".join(tokens_output).strip(),
+        "syntax": "\n".join(syntax_output).strip(),
+        "semantic": "\n".join(semantic_output).strip(),
+    }
+
+
+@app.route("/")
+def index():
+    return render_template("index.html", samples=SAMPLES)
+
+
+@app.route("/api/compile", methods=["POST"])
+def compile_code():
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        code = data.get("code", "").strip()
+
+        if not code:
+            return jsonify({"status": "error", "message": "⚠ Please enter C code to compile"}), 400
+
+        outputs = run_compiler(code)
+        return jsonify({
+            "status": "success",
+            "message": "✓ Compilation finished successfully!",
+            "tokens": outputs["tokens"] or "No tokens output",
+            "syntax": outputs["syntax"],
+            "semantic": outputs["semantic"],
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"status": "error", "message": "✗ Compilation timeout (exceeded 10 seconds)"}), 500
+    except Exception as exc:
+        return jsonify({"status": "error", "message": f"✗ Error: {exc}"}), 500
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_file():
+    try:
+        if "file" not in request.files:
+            return jsonify({"status": "error", "message": "No file provided"}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"status": "error", "message": "No file selected"}), 400
+
+        if not file.filename.endswith(".c"):
+            return jsonify({"status": "error", "message": "Only .c files allowed"}), 400
+
+        content = file.read().decode("utf-8", errors="ignore")
+        return jsonify({
+            "status": "success",
+            "message": f"✓ Loaded: {file.filename}",
+            "code": content,
+        })
+    except Exception as exc:
+        return jsonify({"status": "error", "message": f"Error: {exc}"}), 500
+
+
+@app.route("/api/samples/<sample_name>", methods=["GET"])
+def get_sample(sample_name):
+    if sample_name in SAMPLES:
+        return jsonify({"status": "success", "code": SAMPLES[sample_name]})
+    return jsonify({"status": "error", "message": "Sample not found"}), 404
+
+
+if __name__ == "__main__":
+    app.run(debug=False, host="0.0.0.0", port=5000)
