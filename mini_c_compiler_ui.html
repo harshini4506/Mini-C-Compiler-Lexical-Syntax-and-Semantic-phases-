@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini C Compiler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mini_c_compiler_style.css" />
+  <script src="https://unpkg.com/lucide/dist/lucide.min.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="ambient-shape shape-one"></div>
+    <div class="ambient-shape shape-two"></div>
+    <div class="ambient-shape shape-three"></div>
+
+    <main class="card-layout">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Compiler Design Project</p>
+          <h1>Mini C Compiler</h1>
+          <p class="subtitle">Lexical | Syntax | Semantic Analyzer</p>
+        </div>
+        <div class="header-actions">
+          <button class="secondary-button" type="button">
+            <i data-lucide="upload-cloud"></i>
+            Upload
+          </button>
+          <button class="primary-button" type="button" id="compileBtn">
+            <i data-lucide="play"></i>
+            Compile
+          </button>
+        </div>
+      </header>
+
+      <div class="divider"></div>
+
+      <section class="workspace-grid">
+        <div class="panel code-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Code Editor</h2>
+              <p>Write your C source and compile instantly.</p>
+            </div>
+            <button class="secondary-button" id="clearBtn" type="button">
+              <i data-lucide="trash-2"></i>
+              Clear
+            </button>
+          </div>
+          <div class="editor-shell">
+            <div class="line-numbers" id="lineNumbers"></div>
+            <textarea id="codeEditor" class="code-editor" placeholder="// Write your C code here...">#include &lt;stdio.h&gt;
+
+int main() {
+    int a = 10;
+    printf("Value of a is %d\n", a);
+    return 0;
+}
+</textarea>
+          </div>
+        </div>
+
+        <div class="panel output-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Output</h2>
+              <p>Tokens, errors, and analysis details.</p>
+            </div>
+            <div class="status-pill success">
+              <i data-lucide="check-circle"></i>
+              Ready
+            </div>
+          </div>
+
+          <div class="tabs">
+            <button class="tab-button active" data-tab="tokensTab">
+              <i data-lucide="layers"></i>
+              Tokens
+            </button>
+            <button class="tab-button" data-tab="syntaxTab">
+              <i data-lucide="alert-circle"></i>
+              Syntax Errors
+            </button>
+            <button class="tab-button" data-tab="semanticTab">
+              <i data-lucide="shield-check"></i>
+              Semantic Errors
+            </button>
+          </div>
+
+          <div class="tab-panels">
+            <div class="tab-panel active" id="tokensTab">
+              <div class="badge-row">
+                <span class="badge badge-valid">Valid token</span>
+                <span class="badge badge-warning">Warning</span>
+              </div>
+              <pre><code>// Token stream will appear here after compilation.
+#include &lt;stdio.h&gt;  INCLUDE
+int             INT
+main            ID
+(               LPAREN
+)               RPAREN
+{               LBRACE
+...             ...
+</code></pre>
+            </div>
+            <div class="tab-panel" id="syntaxTab">
+              <div class="empty-state">
+                <span class="status-dot error"></span>
+                <p>No syntax errors detected yet.</p>
+              </div>
+            </div>
+            <div class="tab-panel" id="semanticTab">
+              <div class="empty-state">
+                <span class="status-dot warning"></span>
+                <p>Semantic analysis results will appear here.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">Built for Compiler Design Project</footer>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const textarea = document.getElementById('codeEditor');
+      const lineNumbers = document.getElementById('lineNumbers');
+      const compileBtn = document.getElementById('compileBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const tabButtons = document.querySelectorAll('.tab-button');
+      const tabPanels = document.querySelectorAll('.tab-panel');
+
+      const updateLineNumbers = () => {
+        const lines = textarea.value.split('\n').length;
+        lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => `<span>${i + 1}</span>`).join('');
+      };
+
+      textarea.addEventListener('input', updateLineNumbers);
+      updateLineNumbers();
+
+      compileBtn.addEventListener('click', () => {
+        const syntaxPanel = document.getElementById('syntaxTab');
+        const tokensPanel = document.getElementById('tokensTab');
+        const semanticPanel = document.getElementById('semanticTab');
+
+        tokensPanel.innerHTML = `<div class="badge-row"><span class="badge badge-valid">Valid token</span><span class="badge badge-warning">Warning</span></div><pre><code>// Example compiled output\n#include &lt;stdio.h&gt;  INCLUDE\nint             INT\nmain            ID\n(               LPAREN\n)               RPAREN\n{               LBRACE\nint             INT\na               ID\n=               ASSIGN\n10              NUMBER\n;               SEMICOLON\n}</code></pre>`;
+        syntaxPanel.innerHTML = `<div class="result-card"><div class="result-marker error">Syntax Error</div><p>Line 4: Expected ';' after variable declaration.</p></div>`;
+        semanticPanel.innerHTML = `<div class="result-card"><div class="result-marker success">No semantic issues</div><p>Your program appears semantically valid.</p></div>`;
+
+        document.querySelector('.status-pill').classList.remove('success');
+        document.querySelector('.status-pill').classList.add('valid');
+        document.querySelector('.status-pill').innerHTML = '<i data-lucide="zap"></i> Compiled';
+        lucide.replace();
+      });
+
+      clearBtn.addEventListener('click', () => {
+        textarea.value = '';
+        updateLineNumbers();
+      });
+
+      tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          tabButtons.forEach(btn => btn.classList.remove('active'));
+          tabPanels.forEach(panel => panel.classList.remove('active'));
+
+          button.classList.add('active');
+          document.getElementById(button.dataset.tab).classList.add('active');
+        });
+      });
+
+      lucide.replace();
+    });
+  </script>
+</body>
+</html>
