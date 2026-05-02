@@ -1,4 +1,7 @@
 %{
+    #define _POSIX_C_SOURCE 200809L
+    #include<string.h>
+    #include<unistd.h>
     #include "y.tab.h"
     int countn=0;
 %}
@@ -54,3 +57,4 @@ unary "++"|"--"
 int yywrap() {
     return 1;
 }
+

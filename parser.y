@@ -1,8 +1,10 @@
 %{
+    #define _POSIX_C_SOURCE 200809L
     #include<stdio.h>
     #include<string.h>
     #include<stdlib.h>
     #include<ctype.h>
+    #include<unistd.h>
     void yyerror(const char *s);
     int yylex();
     int yywrap();
@@ -14,6 +16,8 @@
 	int check_types(char *, char *);
 	char *get_type(char *);
 	struct node* mknode(struct node *left, struct node *right, char *token);
+    void print_tree(struct node* tree);
+    void print_tree_util(struct node *root, int space);
     extern char *yytext;
 
     struct dataType {
