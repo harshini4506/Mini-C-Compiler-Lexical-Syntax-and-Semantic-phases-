@@ -49,8 +49,14 @@ SAMPLES = {
 
 
 def ensure_compiler_binary() -> Path:
+    # DEBUG: List available files in working directory
+    available_files = os.listdir(BASE_DIR)
+    print(f"[DEBUG] Working directory: {BASE_DIR}")
+    print(f"[DEBUG] Files present: {[f for f in available_files if f.endswith(('.c', '.h', '.l', '.y'))][:20]}")
+    
     source_mtime = max(source.stat().st_mtime for source in COMPILER_SOURCE_FILES)
     if COMPILER_BINARY_PATH.exists() and COMPILER_BINARY_PATH.stat().st_mtime >= source_mtime:
+        print(f"[DEBUG] Using cached compiler binary: {COMPILER_BINARY_PATH}")
         return COMPILER_BINARY_PATH
 
     missing_sources = [source.name for source in COMPILER_SOURCE_FILES if not source.exists()]
@@ -60,16 +66,20 @@ def ensure_compiler_binary() -> Path:
             "Render needs y.tab.c and lex.yy.c in the project root."
         )
 
+    # Build compiler from y.tab.c and lex.yy.c
     build_command = [
         "gcc",
         "-std=c99",
         "-w",
-        str(COMPILER_SOURCE_FILES[0]),
-        str(COMPILER_SOURCE_FILES[1]),
+        "y.tab.c",
+        "lex.yy.c",
         "-lm",
         "-o",
-        str(COMPILER_BINARY_PATH),
+        COMPILER_BINARY_NAME,
     ]
+    
+    print(f"[DEBUG] Building compiler with: {' '.join(build_command)}")
+    print(f"[DEBUG] Build working dir: {BASE_DIR}")
 
     build_result = subprocess.run(
         build_command,
@@ -77,10 +87,16 @@ def ensure_compiler_binary() -> Path:
         capture_output=True,
         text=True,
     )
+    
+    print(f"[DEBUG] Build stdout: {build_result.stdout}")
+    print(f"[DEBUG] Build stderr: {build_result.stderr}")
+    print(f"[DEBUG] Build returncode: {build_result.returncode}")
 
     if build_result.returncode != 0:
         error_text = build_result.stderr.strip() or build_result.stdout.strip() or "Failed to build compiler binary"
         raise RuntimeError(error_text)
+    
+    print(f"[DEBUG] Compiler successfully built at: {COMPILER_BINARY_PATH}")
 
     return COMPILER_BINARY_PATH
 
