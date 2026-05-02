@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini C Compiler - Professional IDE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- Gradient Background -->
+    <div class="bg-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="title">🔧 Mini C Compiler</h1>
+                <p class="subtitle">Lexical Analysis | Syntax Analysis | Semantic Analysis</p>
+            </div>
+            <div class="header-right">
+                <div class="file-path" id="filePath"></div>
+                <div class="button-row">
+                    <button class="btn btn-secondary" id="uploadBtn" title="Upload a C file">📁 Upload</button>
+                    <button class="btn btn-secondary" id="clearBtn" title="Clear the editor">🗑️ Clear</button>
+                    <button class="btn btn-primary" id="compileBtn" title="Compile the code">▶ Compile</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="divider"></div>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- Left Panel: Code Editor -->
+            <div class="panel editor-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">💻 Code Editor</h2>
+                    <p class="panel-subtitle">Write your C code with syntax highlighting support.</p>
+                </div>
+
+                <div class="editor-container">
+                    <div class="line-numbers" id="lineNumbers"></div>
+                    <textarea id="codeEditor" class="code-editor" placeholder="// Enter your C code here..."></textarea>
+                </div>
+
+                <div class="sample-controls">
+                    <label for="sampleSelect">📝 Load Sample:</label>
+                    <select id="sampleSelect" class="sample-select">
+                        <option value="">-- Choose a sample --</option>
+                        {% for sample_name in samples %}
+                        <option value="{{ sample_name }}">{{ sample_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Right Panel: Output -->
+            <div class="panel output-panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">📊 Analysis Output</h2>
+                    <p class="panel-subtitle">View compilation results and feedback across 3 stages.</p>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs-container">
+                    <div class="tabs-header">
+                        <button class="tab-button active" data-tab="tokens">🔤 Tokens</button>
+                        <button class="tab-button" data-tab="syntax">⚠️ Syntax Errors</button>
+                        <button class="tab-button" data-tab="semantic">🔍 Semantic Analysis</button>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div class="tabs-content">
+                        <!-- Tokens Tab -->
+                        <div class="tab-content active" id="tokens-tab">
+                            <div class="badge-group">
+                                <span class="badge badge-success">✓ Valid token</span>
+                                <span class="badge badge-error">✗ Error</span>
+                                <span class="badge badge-warning">⚠ Warning</span>
+                            </div>
+                            <textarea class="output-text" id="tokensOutput" readonly placeholder="// Compile results will appear here...">// Compile results will appear here...</textarea>
+                        </div>
+
+                        <!-- Syntax Errors Tab -->
+                        <div class="tab-content" id="syntax-tab">
+                            <textarea class="output-text" id="syntaxOutput" readonly placeholder="Waiting for compilation...">Waiting for compilation...</textarea>
+                        </div>
+
+                        <!-- Semantic Analysis Tab -->
+                        <div class="tab-content" id="semantic-tab">
+                            <textarea class="output-text" id="semanticOutput" readonly placeholder="Waiting for compilation...">Waiting for compilation...</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-message" id="statusMessage">✓ Ready to compile. Upload or write your C code.</div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            🚀 Professional Mini C Compiler IDE | Lexer • Parser • Semantic Analyzer
+        </footer>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="fileInput" accept=".c" style="display: none;">
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
