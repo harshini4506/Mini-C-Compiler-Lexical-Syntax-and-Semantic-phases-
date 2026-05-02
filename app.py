@@ -56,37 +56,31 @@ def ensure_compiler_binary() -> Path:
     print(f"📂 Working directory: {BASE_DIR}")
     print(f"📂 Available files: {[f for f in os.listdir(BASE_DIR) if f.endswith(('.c', '.h', '.l', '.y'))][:20]}")
     
-    # Step 1: Generate lexer from lexer.l if lex.yy.c doesn't exist
+    # Step 1: Regenerate lexer from lexer.l so changes always take effect
     lexer_output = BASE_DIR / "lex.yy.c"
-    if not lexer_output.exists():
-        print("⚙️ Generating lex.yy.c using flex from lexer.l...")
-        result = subprocess.run(
-            ["flex", "-o", "lex.yy.c", "lexer.l"],
-            cwd=BASE_DIR,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"flex failed: {result.stderr}")
-        print("✓ lex.yy.c generated successfully")
-    else:
-        print("✓ lex.yy.c already exists")
+    print("⚙️ Regenerating lex.yy.c using flex from lexer.l...")
+    result = subprocess.run(
+        ["flex", "-o", "lex.yy.c", "lexer.l"],
+        cwd=BASE_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"flex failed: {result.stderr or result.stdout}")
+    print("✓ lex.yy.c generated successfully")
     
-    # Step 2: Generate parser from parser.y if y.tab.c doesn't exist
+    # Step 2: Regenerate parser from parser.y so grammar changes always take effect
     parser_output = BASE_DIR / "y.tab.c"
-    if not parser_output.exists():
-        print("⚙️ Generating y.tab.c using bison from parser.y...")
-        result = subprocess.run(
-            ["bison", "-d", "-o", "y.tab.c", "parser.y"],
-            cwd=BASE_DIR,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"bison failed: {result.stderr}")
-        print("✓ y.tab.c generated successfully")
-    else:
-        print("✓ y.tab.c already exists")
+    print("⚙️ Regenerating y.tab.c using bison from parser.y...")
+    result = subprocess.run(
+        ["bison", "-d", "-o", "y.tab.c", "parser.y"],
+        cwd=BASE_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"bison failed: {result.stderr or result.stdout}")
+    print("✓ y.tab.c generated successfully")
     
     # Step 3: Detect parser file (handle both y.tab.c and parser.tab.c)
     if (BASE_DIR / "y.tab.c").exists():
