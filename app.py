@@ -103,6 +103,8 @@ def ensure_compiler_binary() -> Path:
     # Step 5: Compile parser + lexer → binary
     build_command = [
         "gcc",
+        "-D_POSIX_C_SOURCE=200809L",
+        "-D_DEFAULT_SOURCE",
         "-std=c99",
         "-w",
         parser_file,
